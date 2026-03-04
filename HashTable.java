@@ -5,105 +5,70 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Optional;
 
 public class HashTable {
 
-// Methods you have to supply
-// 
-//
-    private class Iterator {
-
-
-        Node currentNode;
-        int currentIndex = 0;
-        
-
+    public class Iterator {
+        private Node nextNode;
+        private int nextIndex;
 
         public Iterator() {
-
-            if (table.length>0) {
-                currentNode = table[0];
-            } else {
-                currentNode = null;
-            }
-            // We don't really need to do anything here.
+            nextNode = null;
+            nextIndex = 0;
+            findNext();
         }
 
-        public Node next() {
+        private void findNext() {
+            // If we are currently in a chain, move to the next node in that chain
+            if (nextNode != null && nextNode.getNext() != null) {
+                nextNode = nextNode.getNext();
+                return;
+            }
 
-            if (currentNode != null) {
-                currentNode = currentNode.getNext();
-                return currentNode;
-            } else {
-                // increase the index and set new node;
-
-                if (table[currentIndex+1] != null) {
-                    currentNode = table[currentIndex+1];
-                    return currentNode;
-                } else {
-                    if (table.length > 0) {
-                        currentNode = table[0];
-                    }
-                    return null;
-                    // return null;
+            // Otherwise, scan the table for the next non-empty bucket
+            while (nextIndex < table.length) {
+                if (table[nextIndex] != null) {
+                    nextNode = table[nextIndex];
+                    nextIndex++; // Advance index so next search starts at the following bucket
+                    return;
                 }
-                
+                nextIndex++;
             }
+            nextNode = null;
         }
 
-        
-        public void printAll() {
-            Node newNext = next();
-
-            while (newNext != null) {
-                System.out.println(newNext.value);
+        public Optional<Node> next() {
+            if (nextNode == null) {
+                return Optional.empty();
             }
+            Node current = nextNode;
+            findNext();
+            return Optional.of(current);
         }
-
 
         public boolean hasNext() {
-
-            if (currentNode != null) {
-                Node nextNode = currentNode.getNext();
-
-                if (nextNode != null || table[currentIndex+1] != null) {
-                    return true;
-                } else {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-
-            
+            return nextNode != null;
         }
-        
 
-
-
-
-
-
+        public void printAll() {
+            while (hasNext()) {
+                next().ifPresent(node -> System.out.println(node.value));
+            }
+        }
     }
 
-    // We can start by this by default
     private Node[] table = new Node[100];
-
     private int amountUsed = 0;
-    Iterator publicIterator = new Iterator();
-    // private int[] allT/rees = new int[table.length];
     private int totalLength = table.length;
 
-
-
-	/**
-	 * Loads this HashTable from a file named "Lookup.dat".
-	 */
+    /**
+     * Loads this HashTable from a file named "Lookup.dat".
+     */
     public void load() {
         FileReader fileReader;
         BufferedReader bufferedReader = null;
         
-        // Open the file for reading
         try {
             File f = new File(System.getProperty("user.home"), "Lookup.dat");
             fileReader = new FileReader(f);
@@ -111,9 +76,9 @@ public class HashTable {
         }
         catch (FileNotFoundException e) {
             System.err.println("Cannot find input file \"Lookup.dat\"");
+            return;
         }
         
-        // Read the file contents and save in the HashTable
         try {
             while (true) {
                 String key = bufferedReader.readLine();
@@ -124,7 +89,7 @@ public class HashTable {
                     System.exit(1);
                 }
                 String blankLine = bufferedReader.readLine();
-                if (!"".equals(blankLine)) {
+                if (blankLine != null && !"".equals(blankLine)) {
                     System.out.println("Error in input file");
                     System.exit(1);
                 }
@@ -134,25 +99,24 @@ public class HashTable {
         catch (IOException e) {
             e.printStackTrace(System.out);
         }
-        
-        // Close the file when we're done
-        try {
-            bufferedReader.close( );
-        }
-        catch(IOException e) {
-            e.printStackTrace(System.out);
+        finally {
+            try {
+                if (bufferedReader != null) bufferedReader.close();
+            }
+            catch(IOException e) {
+                e.printStackTrace(System.out);
+            }
         }
     }
 
-	// /**
-	//  * Saves this HashTable onto a file named "Lookup.dat".
-	//  */
-	public void save() {
+    /**
+     * Saves this HashTable onto a file named "Lookup.dat".
+     */
+    public void save() {
         FileOutputStream stream;
         PrintWriter printWriter = null;
         Iterator iterator;
         
-        // Open the file for writing
         try {
             File f = new File(System.getProperty("user.home"), "Lookup.dat");
             stream = new FileOutputStream(f);
@@ -160,21 +124,24 @@ public class HashTable {
         }
         catch (Exception e) {
             System.err.println("Cannot use output file \"Lookup.dat\"");
+            return;
         }
        
-        // Write the contents of this HashTable to the file
         iterator = keys();
         while (iterator.hasNext()) {
-            String key = (String)iterator.next().value;
-            printWriter.println(key);
-            String value = (String)get(key);
-            value = removeNewlines(value);
-            printWriter.println(value);
-            printWriter.println();
+            Node thingy = iterator.next().orElse(null);
+            if (thingy != null) {
+                String key = (String) thingy.value;
+                printWriter.println(key);
+                String value = (String)get(key);
+                value = removeNewlines(value);
+                printWriter.println(value);
+                printWriter.println();
+            } else {
+                break;
+            }
         }
-       
-        // Close the file when we're done
-        printWriter.close( );
+        printWriter.close();
     }
         
     /**
@@ -188,205 +155,105 @@ public class HashTable {
         return value.replaceAll("\r|\n", " ");
     }
 
-
     public int calculatePossibleHash(String key) {
-
         int defaultHash = key.hashCode();
-
-        int newThing = defaultHash % totalLength;
-
-        
-
-        return newThing;
+        return Math.abs(defaultHash) % totalLength;
     }   
     
-    // public static boolean isPrimitiveArray(Object obj) {
-    //     if (obj == null) {
-    //         return false;
-    //     }
-    //     Class<?> clazz = obj.getClass();
-    //     return clazz.isArray() && clazz.getComponentType().isPrimitive();
-    // }
-
     private void handleHashState() {
-
-        // This will automatically double and rebalance this hashtable
-        if (amountUsed > (2./3.)*totalLength) {
-
-            Node[] newTable = new Node[table.length*2];
-            totalLength = table.length*2;
+        if (amountUsed > (2.0/3.0)*totalLength) {
+            int newLength = table.length * 2;
+            Node[] newTable = new Node[newLength];
             Node[] tempTable = table;
             table = newTable;
+            totalLength = newLength;
+            amountUsed = 0; // Will be incremented back in put()
 
             for (int i=0; i<tempTable.length; i++) {
-
-
                 if (tempTable[i] != null) {
                     Node currentNode = tempTable[i];
-
-                    put(currentNode.value);
-
-                    while (currentNode.getNext() != null) {
+                    while (currentNode != null) {
                         put(currentNode.value);
                         currentNode = currentNode.getNext();
                     }
-
-
-                    
-                    // This means there's an elemant
-
-
                 }
-                
-
-
             }
-
-
-            // We need to rebalance the tree
-        } else {
-            System.out.println("Already balanced properly");
         }
-
-
     }
-
-
 
     public int put(String key) {
         int hashCode = calculatePossibleHash(key);
 
-        // I think zero means that it is empty
         if (table[hashCode] == null) {
-            // We can just place it there, no collision;
             table[hashCode] = new Node(key);
-            // allTrees[hashCode] = key.hashCode();
             amountUsed++;
+            handleHashState(); // Check if we need to resize
             return hashCode;
         } else {
-
             Node currentNode = table[hashCode];
-
-            while (currentNode.getNext() != null) {
+            // Check if key already exists in this bucket chain
+            while (currentNode != null) {
+                if (currentNode.value.equals(key)) {
+                    return hashCode; // Key already exists
+                }
+                if (currentNode.getNext() == null) break;
                 currentNode = currentNode.getNext();
             }
-
+            // Add new node to the end of the chain
             currentNode.setNext(new Node(key));
-
-
-            // Im not sure if we should be adding since, in theory, it is still inside an index. 
             amountUsed++;
-
             handleHashState();
             return hashCode;
-
-            // This will chain things appropiately.
-
-
-            // This is chaining properly done.
-
-
-
-
-            // This means there was a collsion
-
-            // Okay, we need to start chaining in here;
-
-            
-
-
-
-            // Okay, we first need to check if the amount of total collisions is higher than the base amount
-
-
-            // if (amountUsed > (2/3)*table.length) {
-
-            //     // We need to double the array here
-
-
-            // }
-
-
-
-
-
         }
-
-
-        
-
-        // Now, we can check the state of this hash table
-
-
-        // System.out.println("Put here: " + hashCode);
-
- 
-        
- 
     }
 
- public String get(String key) {
+    public String get(String key) {
+        int index = calculatePossibleHash(key);
 
-    int index = key.hashCode() % totalLength;
-
-    if (table[index] != null) {
-        // We can just return the first one since we rly dont care.
-        return table[index].value;
-    } else {
+        if (table[index] != null) {
+            Node current = table[index];
+            while (current != null) {
+                if (current.value.equals(key)) {
+                    return current.value;
+                }
+                current = current.getNext();
+            }
+        }
         return "";
     }
- }
 
- public String remove(String key){
-    // The same as put but inverse;
-    int hashCode = calculatePossibleHash(key);
+    public String remove(String key){
+        int hashCode = calculatePossibleHash(key);
 
-    if (table[hashCode] == null) {
-            // We can just place it there, no collision;
-        // then this thing cannot exist
-            // return hashCode;
+        if (table[hashCode] == null) {
             return "";
-    } else {
-
-        Node currentNode = table[hashCode];
-        Node prev = currentNode;
-        if (currentNode.value.equals(key)) {
-            // We need to remove this node from the linked list;
-            table[hashCode] = currentNode.getNext();
-            // allTrees[hashCode]
-            amountUsed--;
-            return key;
+        } else {
+            Node currentNode = table[hashCode];
+            Node prev = null;
+            
+            while (currentNode != null) {
+                if (currentNode.value.equals(key)) {
+                    if (prev == null) {
+                        table[hashCode] = currentNode.getNext();
+                    } else {
+                        prev.setNext(currentNode.getNext());
+                    }
+                    amountUsed--;
+                    return key;
+                }
+                prev = currentNode;
+                currentNode = currentNode.getNext();
+            }
         }
-        while (currentNode.getNext() != null && !currentNode.value.equals(key)) {
-            prev = currentNode;
-            currentNode = currentNode.getNext();
-        }
+        return "";
+    }
 
-        if (currentNode != null) {
-            prev.next = currentNode.getNext();
-            amountUsed--;
-        } 
-        }
+    public Iterator keys() {
+        return new Iterator();
+    } 
 
-
-
-
-    return key;
-	}
-
-  public Iterator keys() {
-    publicIterator.next();
-    return publicIterator;
-  } 
-
- public void print(){
-    Iterator newIterator = new Iterator();
-    newIterator.printAll();
-	}
-
-
+    public void print(){
+        Iterator newIterator = new Iterator();
+        newIterator.printAll();
+    }
 }
-
-
-
-// publi
